@@ -448,7 +448,7 @@ if [[ $ping_result == "Connected" ]]; then
 		git pull --rebase origin master
 	fi
 
-	# PHP_CodeSniffer (for running WordPress-Coding-Standards)
+	# PHP_CodeSniffer (for running moodle-local_codechecker)
 	if [[ ! -d /srv/www/phpcs ]]; then
 		echo -e "\nDownloading PHP_CodeSniffer (phpcs), see https://github.com/squizlabs/PHP_CodeSniffer"
 		git clone -b master https://github.com/squizlabs/PHP_CodeSniffer.git /srv/www/phpcs
@@ -462,49 +462,7 @@ if [[ $ping_result == "Connected" ]]; then
 		fi
 	fi
 
-	# Sniffs WordPress Coding Standards
-	if [[ ! -d /srv/www/phpcs/CodeSniffer/Standards/WordPress ]]; then
-		echo -e "\nDownloading WordPress-Coding-Standards, sniffs for PHP_CodeSniffer, see https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards"
-		git clone -b master https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards.git /srv/www/phpcs/CodeSniffer/Standards/WordPress
-	else
-		cd /srv/www/phpcs/CodeSniffer/Standards/WordPress
-		if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
-			echo -e "\nUpdating PHP_CodeSniffer WordPress Coding Standards..."
-			git pull --no-edit origin master
-		else
-			echo -e "\nSkipped updating PHPCS WordPress Coding Standards since not on master branch"
-		fi
-	fi
-	# Install the standards in PHPCS
-	/srv/www/phpcs/scripts/phpcs --config-set installed_paths ./CodeSniffer/Standards/WordPress/
-	/srv/www/phpcs/scripts/phpcs -i
-
 	# Install and configure the latest stable version of WordPress
-	if [[ ! -d /srv/www/wordpress-default ]]; then
-		echo "Downloading WordPress Stable, see http://wordpress.org/"
-		cd /srv/www/
-		curl -L -O https://wordpress.org/latest.tar.gz
-		tar -xvf latest.tar.gz
-		mv wordpress wordpress-default
-		rm latest.tar.gz
-		cd /srv/www/wordpress-default
-		echo "Configuring WordPress Stable..."
-		wp core config --dbname=wordpress_default --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(local.wordpress.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-}
-
-define( 'WP_DEBUG', true );
-PHP
-		echo "Installing WordPress Stable..."
-		wp core install --url=local.wordpress.dev --quiet --title="Local WordPress Dev" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
-	else
-		echo "Updating WordPress Stable..."
-		cd /srv/www/wordpress-default
-		wp core upgrade
-	fi
 
 	# Test to see if an svn upgrade is needed
 	svn_test=$( svn status -u /srv/www/wordpress-develop/ 2>&1 );
@@ -516,74 +474,94 @@ PHP
 	fi;
 
 	# Checkout, install and configure WordPress trunk via core.svn
-	if [[ ! -d /srv/www/wordpress-trunk ]]; then
-		echo "Checking out WordPress trunk from core.svn, see https://core.svn.wordpress.org/trunk"
-		svn checkout https://core.svn.wordpress.org/trunk/ /srv/www/wordpress-trunk
-		cd /srv/www/wordpress-trunk
-		echo "Configuring WordPress trunk..."
-		wp core config --dbname=wordpress_trunk --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(local.wordpress-trunk.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-}
-
-define( 'WP_DEBUG', true );
-PHP
-		echo "Installing WordPress trunk..."
-		wp core install --url=local.wordpress-trunk.dev --quiet --title="Local WordPress Trunk Dev" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
+	if [[ ! -d /srv/www/wordpress-master ]]; then
+		echo "Checking out Moodle master from GitHub, see https://github.com/moodle/moodle"
+		git clone https://github.com/moodle/moodle.git /srv/www/moodle-master
+		cd /srv/www/moodle-master
+#		echo "Configuring Moodle master..."
+#		wp core config --dbname=wordpress_trunk --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
+#// Match any requests made via xip.io.
+#if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(local.wordpress-trunk.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
+#	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
+#	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
+#}
+#
+#define( 'WP_DEBUG', true );
+#PHP
+#		echo "Installing WordPress trunk..."
+#		wp core install --url=local.wordpress-trunk.dev --quiet --title="Local WordPress Trunk Dev" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
 	else
-		echo "Updating WordPress trunk..."
-		cd /srv/www/wordpress-trunk
-		svn up
+		echo "Updating Moodle master..."
+		cd /srv/www/moodle-master
+		git pull --no-edit https://github.com/moodle/moodle.git master
 	fi
 
 	# Checkout, install and configure WordPress trunk via develop.svn
-	if [[ ! -d /srv/www/wordpress-develop ]]; then
-		echo "Checking out WordPress trunk from develop.svn, see https://develop.svn.wordpress.org/trunk"
-		svn checkout https://develop.svn.wordpress.org/trunk/ /srv/www/wordpress-develop
-		cd /srv/www/wordpress-develop/src/
-		echo "Configuring WordPress develop..."
-		wp core config --dbname=wordpress_develop --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(src|build)(.wordpress-develop.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-} else if ( 'build' === basename( dirname( __FILE__ ) ) ) {
-	// Allow (src|build).wordpress-develop.dev to share the same Database
-	define( 'WP_HOME', 'http://build.wordpress-develop.dev' );
-	define( 'WP_SITEURL', 'http://build.wordpress-develop.dev' );
-}
-
-define( 'WP_DEBUG', true );
-PHP
-		echo "Installing WordPress develop..."
-		wp core install --url=src.wordpress-develop.dev --quiet --title="WordPress Develop" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
-		cp /srv/config/wordpress-config/wp-tests-config.php /srv/www/wordpress-develop/
-		cd /srv/www/wordpress-develop/
-		echo "Running npm install for the first time, this may take several minutes..."
-		npm install &>/dev/null
-	else
-		echo "Updating WordPress develop..."
-		cd /srv/www/wordpress-develop/
-		if [[ -e .svn ]]; then
-			svn up
-		else
-			if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
-				git pull --no-edit git://develop.git.wordpress.org/ master
-			else
-				echo "Skip auto git pull on develop.git.wordpress.org since not on master branch"
-			fi
-		fi
+#	if [[ ! -d /srv/www/wordpress-develop ]]; then
+#		echo "Checking out WordPress trunk from develop.svn, see https://develop.svn.wordpress.org/trunk"
+#		svn checkout https://develop.svn.wordpress.org/trunk/ /srv/www/wordpress-develop
+#		cd /srv/www/wordpress-develop/src/
+#		echo "Configuring WordPress develop..."
+#		wp core config --dbname=wordpress_develop --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
+#// Match any requests made via xip.io.
+#if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(src|build)(.wordpress-develop.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
+#	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
+#	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
+#} else if ( 'build' === basename( dirname( __FILE__ ) ) ) {
+#	// Allow (src|build).wordpress-develop.dev to share the same Database
+#	define( 'WP_HOME', 'http://build.wordpress-develop.dev' );
+#	define( 'WP_SITEURL', 'http://build.wordpress-develop.dev' );
+#}
+#
+#define( 'WP_DEBUG', true );
+#PHP
+#		echo "Installing WordPress develop..."
+#		wp core install --url=src.wordpress-develop.dev --quiet --title="WordPress Develop" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
+#		cp /srv/config/wordpress-config/wp-tests-config.php /srv/www/wordpress-develop/
+#		cd /srv/www/wordpress-develop/
+#		echo "Running npm install for the first time, this may take several minutes..."
+#		npm install &>/dev/null
+#	else
+#		echo "Updating WordPress develop..."
+#		cd /srv/www/wordpress-develop/
+#		if [[ -e .svn ]]; then
+#			svn up
+#		else
+#			if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
+#				git pull --no-edit git://develop.git.wordpress.org/ master
+#			else
+#				echo "Skip auto git pull on develop.git.wordpress.org since not on master branch"
+#			fi
+#		fi
 		echo "Updating npm packages..."
 		npm install &>/dev/null
-	fi
+#	fi
 
-	if [[ ! -d /srv/www/wordpress-develop/build ]]; then
-		echo "Initializing grunt in WordPress develop... This may take a few moments."
-		cd /srv/www/wordpress-develop/
-		grunt
+#	if [[ ! -d /srv/www/wordpress-develop/build ]]; then
+#		echo "Initializing grunt in WordPress develop... This may take a few moments."
+#		cd /srv/www/wordpress-develop/
+#		grunt
+#	fi
+
+	# Sniffs Moodle Coding Standards
+	if [[ ! -d /srv/www/phpcs/CodeSniffer/Standards/Moodle ]]; then
+		echo -e "\nDownloading moodle-local_codechecker, sniffs for PHP_CodeSniffer, see https://github.com/moodlehq/moodle-local_codechecker"
+		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/phpcs/CodeSniffer/Standards/Moodle
+		ln -s /srv/
+	else
+		cd /srv/www/phpcs/CodeSniffer/Standards/Moodle
+		if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
+			echo -e "\nUpdating PHP_CodeSniffer Moodle Coding Standards..."
+			git pull --no-edit origin master
+		else
+			echo -e "\nSkipped updating PHPCS Moodle Coding Standards since not on master branch"
+		fi
 	fi
+	# Install the standards in PHPCS
+	/srv/www/phpcs/scripts/phpcs --config-set installed_paths ./CodeSniffer/Standards/Moodle/
+	/srv/www/phpcs/scripts/phpcs -i
+	# Install into Moodle
+	ln -s /srv/www/phpcs/CodeSniffer/Standards/Moodle /srv/www/moodle-master/local/codechecker
 
 	# Download phpMyAdmin
 	if [[ ! -d /srv/www/default/database-admin ]]; then
