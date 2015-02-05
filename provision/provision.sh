@@ -513,15 +513,16 @@ if [[ $ping_result == "Connected" ]]; then
 	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin build-pipeline-plugin
 	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin checkstyle
 	# To make things easier, run Jenkins as www-data:vagrant
-	patch /etc/defaults/jenkins /srv/config/jenkins-config/etc-defaults.diff
+	patch /etc/default/jenkins /srv/config/jenkins-config/etc-default.diff
 	chown -R www-data:vagrant /var/lib/jenkins
 	chown -R www-data:vagrant /var/cache/jenkins
 	chown -R www-data:vagrant /var/log/jenkins
 	chown -R www-data:vagrant /usr/share/jenkins
+	chown -R www-data:vagrant /var/run/jenkins
 	/etc/init.d/jenkins restart
 	# After the restart, all plugins are available. Create the jobs...
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Unit" < cat /srv/config/jenkins/moodle-unit.xml
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Metrics" < cat /srv/config/jenkins/moodle-metrics.xml
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Unit" < /srv/config/jenkins-config/moodle-unit.xml
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Metrics" < /srv/config/jenkins-config/moodle-metrics.xml
 
 	# Configure Moodle QA
 	echo "Configuring Moodle QA..."
