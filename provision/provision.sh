@@ -530,6 +530,8 @@ if [[ $ping_result == "Connected" ]]; then
 	if [[ $? -ne 0 ]]; then
 		echo "\$CFG->phpunit_prefix = 'phpu_';" >> /srv/www/moodle-master/config.php
 		echo "\$CFG->phpunit_dataroot = '/home/vagrant/phpu_moodledata';" >> /srv/www/moodle-master/config.php
+		mkdir /home/vagrant/phpu_moodledata
+		chown -R www-data:vagrant phpu_moodledata
 	fi
 	cd /srv/www/moodle-master
 	php admin/tool/phpunit/cli/init.php
