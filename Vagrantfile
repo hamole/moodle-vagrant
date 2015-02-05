@@ -20,7 +20,7 @@ Vagrant.configure("2") do |config|
   config.vm.provider :parallels do |v|
     v.update_guest_tools = true
     v.optimize_power_consumption = false
-    v.memory = 1024
+    v.memory = 2048
   end
 
   # SSH Agent Forwarding

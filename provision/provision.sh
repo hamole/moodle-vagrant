@@ -101,6 +101,9 @@ apt_package_check_list=(
 	# nodejs for use by grunt
 	g++
 	nodejs
+
+	# QA pipeline
+	jenkins
 )
 
 echo "Check for apt packages to install..."
@@ -161,6 +164,11 @@ if [[ $ping_result == "Connected" ]]; then
 		echo "Applying nodejs signing key..."
 		apt-key adv --quiet --keyserver hkp://keyserver.ubuntu.com:80 --recv-key C7917B12 2>&1 | grep "gpg:"
 		apt-key export C7917B12 | apt-key add -
+
+		# Retrieve the Jenkins CI signing key from jenkins-ci.org
+		echo "Appplying Jenkins CI singing key..."
+		wget -q -O - https://jenkins-ci.org/debian/jenkins-ci.org.key | sudo apt-key add -
+		sudo sh -c 'echo deb http://pkg.jenkins-ci.org/debian binary/ > /etc/apt/sources.list.d/jenkins.list'
 
 		# update all of the package references before installing anything
 		echo "Running apt-get update..."
@@ -482,25 +490,20 @@ if [[ $ping_result == "Connected" ]]; then
 		cd /srv/www/moodle-master
 		echo "Configuring Moodle..."
 		sudo -u www-data php admin/cli/install.php --lang=de --non-interactive --allow-unstable --agree-license --wwwroot="http://local.moodle.dev" --dataroot=/srv/moodledata --dbuser=mdl --dbpass=mdl --fullname="Moodle QA Environment" --shortname="MDLQA" --adminpass="Moodle1!" --adminemail="mail@example.com"
+		composer install --prefer-source --no-interaction
 	else
 		echo "Updating Moodle master..."
 		cd /srv/www/moodle-master
 		git pull --no-edit https://github.com/moodle/moodle.git master
+		composer update
 	fi
 
-#	if [[ ! -d /srv/www/wordpress-develop/build ]]; then
-#		echo "Initializing grunt in WordPress develop... This may take a few moments."
-#		cd /srv/www/wordpress-develop/
-#		grunt
-#	fi
-
 	# Sniffs Moodle Coding Standards
-	if [[ ! -d /srv/www/phpcs/CodeSniffer/Standards/Moodle ]]; then
+	if [[ ! -d /srv/www/moodle-master/local/codechecker ]]; then
 		echo -e "\nDownloading moodle-local_codechecker, sniffs for PHP_CodeSniffer, see https://github.com/moodlehq/moodle-local_codechecker"
 		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/moodle-master/local/codechecker
-		ln -s /srv/
 	else
-		cd /srv/www/phpcs/CodeSniffer/Standards/Moodle
+		cd /srv/www/moodle-master/local/codechecker
 		if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
 			echo -e "\nUpdating PHP_CodeSniffer Moodle Coding Standards..."
 			git pull --no-edit origin master
@@ -523,6 +526,30 @@ if [[ $ping_result == "Connected" ]]; then
 		echo "PHPMyAdmin already installed."
 	fi
 	cp /srv/config/phpmyadmin-config/config.inc.php /srv/www/default/database-admin/
+
+	# Configure Jenkins CI
+	if [[ ! -f /usr/share/jenkins/jenkins-cli.jar ]]; then
+		echo "Downloading Jenkins CI command line interface..."
+		curl -o /usr/share/jenkins/jenkins-cli.jar http://local.moodle.qa//jnlpJars/jenkins-cli.jar
+	fi
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin git
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin build-pipeline-plugin
+	# To make things easier, run Jenkins as www-data:vagrant
+	#chown -R www-data:vagrant /var/lib/jenkins
+	#chown -R www-data:vagrant /var/cache/jenkins
+	#chown -R www-data:vagrant /var/log/jenkins
+	#chown -R www-data:vagrant /usr/share/jenkins
+	/etc/init.d/jenkins restart
+
+	# Configure Moodle QA
+	cat /srv/www/moodle-master/config.php | grep phpunit_ >/dev/null
+	if [[ $? -ne 0 ]]; then
+		echo "\$CFG->phpunit_prefix = 'phpu_';" >> /srv/www/moodle-master/config.php
+		echo "\$CFG->phpunit_dataroot = '/home/vagrant/phpu_moodledata';" >> /srv/www/moodle-master/config.php
+	fi
+	cd /srv/www/moodle-master
+	php admin/tool/phpunit/cli/init.php
+
 else
 	echo -e "\nNo network available, skipping network installations"
 fi
