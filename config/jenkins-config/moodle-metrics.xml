@@ -26,7 +26,7 @@
     <hudson.tasks.Shell>
       <command>cd /srv/www/moodle-master
 # Creates checkstyle.xml
-php local/codechecker/run.php calendar
+php local/codechecker/run.php .
 mv local/codechecker/checkstyle.xml ${WORKSPACE}/checkstyle.xml</command>
     </hudson.tasks.Shell>
   </builders>
