@@ -407,21 +407,6 @@ if (( $EUID == 0 )); then
 fi
 
 if [[ $ping_result == "Connected" ]]; then
-	# WP-CLI Install
-#	if [[ ! -d /srv/www/wp-cli ]]; then
-#		echo -e "\nDownloading wp-cli, see http://wp-cli.org"
-#		git clone https://github.com/wp-cli/wp-cli.git /srv/www/wp-cli
-#		cd /srv/www/wp-cli
-#		composer install
-#	else
-#		echo -e "\nUpdating wp-cli..."
-#		cd /srv/www/wp-cli
-#		git pull --rebase origin master
-#		composer update
-#	fi
-	# Link `wp` to the `/usr/local/bin` directory
-#	ln -sf /srv/www/wp-cli/bin/wp /usr/local/bin/wp
-
 	# Download and extract phpMemcachedAdmin to provide a dashboard view and
 	# admin interface to the goings on of memcached when running
 	if [[ ! -d /srv/www/default/memcached-admin ]]; then
@@ -472,17 +457,6 @@ if [[ $ping_result == "Connected" ]]; then
 		fi
 	fi
 
-	# Install and configure the latest stable version of WordPress
-
-	# Test to see if an svn upgrade is needed
-#	svn_test=$( svn status -u /srv/www/wordpress-develop/ 2>&1 );
-#	if [[ $svn_test == *"svn upgrade"* ]]; then
-#		# If the wordpress-develop svn repo needed an upgrade, they probably all need it
-#		for repo in $(find /srv/www -maxdepth 5 -type d -name '.svn'); do
-#			svn upgrade "${repo/%\.svn/}"
-#		done
-#	fi;
-
 	# Checkout, install and configure Moodle master via GitHub
 	if [[ ! -d /srv/www/moodle-master ]]; then
 		echo "Checking out Moodle master from GitHub, see https://github.com/moodle/moodle"
@@ -502,6 +476,8 @@ if [[ $ping_result == "Connected" ]]; then
 	if [[ ! -d /srv/www/moodle-master/local/codechecker ]]; then
 		echo -e "\nDownloading moodle-local_codechecker, sniffs for PHP_CodeSniffer, see https://github.com/moodlehq/moodle-local_codechecker"
 		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/moodle-master/local/codechecker
+		cd /srv/www/moodle-master/local/codechecker
+		git am < /srv/config/jenkins-config/checkstyle-report.patch
 	else
 		cd /srv/www/moodle-master/local/codechecker
 		if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
@@ -511,7 +487,7 @@ if [[ $ping_result == "Connected" ]]; then
 			echo -e "\nSkipped updating PHPCS Moodle Coding Standards since not on master branch"
 		fi
 	fi
-	/srv/www/phpcs/scripts/phpcs --config-set installed_paths /srv/www/moodle-master/local/codechecker/moodle/
+	/srv/www/phpcs/scripts/phpcs --config-set installed_paths /srv/www/moodle-master/local/codechecker
 	/srv/www/phpcs/scripts/phpcs -i
 
 	# Download phpMyAdmin
@@ -532,16 +508,23 @@ if [[ $ping_result == "Connected" ]]; then
 		echo "Downloading Jenkins CI command line interface..."
 		curl -o /usr/share/jenkins/jenkins-cli.jar http://local.moodle.qa//jnlpJars/jenkins-cli.jar
 	fi
+	echo "Configuring Jenkins CI..."
 	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin git
 	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin build-pipeline-plugin
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin checkstyle
 	# To make things easier, run Jenkins as www-data:vagrant
-	#chown -R www-data:vagrant /var/lib/jenkins
-	#chown -R www-data:vagrant /var/cache/jenkins
-	#chown -R www-data:vagrant /var/log/jenkins
-	#chown -R www-data:vagrant /usr/share/jenkins
+	patch /etc/defaults/jenkins /srv/config/jenkins-config/etc-defaults.diff
+	chown -R www-data:vagrant /var/lib/jenkins
+	chown -R www-data:vagrant /var/cache/jenkins
+	chown -R www-data:vagrant /var/log/jenkins
+	chown -R www-data:vagrant /usr/share/jenkins
 	/etc/init.d/jenkins restart
+	# After the restart, all plugins are available. Create the jobs...
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Unit" < cat /srv/config/jenkins/moodle-unit.xml
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Metrics" < cat /srv/config/jenkins/moodle-metrics.xml
 
 	# Configure Moodle QA
+	echo "Configuring Moodle QA..."
 	cat /srv/www/moodle-master/config.php | grep phpunit_ >/dev/null
 	if [[ $? -ne 0 ]]; then
 		echo "\$CFG->phpunit_prefix = 'phpu_';" >> /srv/www/moodle-master/config.php

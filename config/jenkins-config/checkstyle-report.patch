@@ -1,0 +1,51 @@
+From b016cc82ca08eea28e2a22135a0372899ec0eb38 Mon Sep 17 00:00:00 2001
+From: Christoph Thelen <christoph.thelen@mni.thm.de>
+Date: Thu, 5 Feb 2015 15:07:11 +0000
+Subject: [PATCH] Force checkstyle report
+
+---
+ locallib.php | 6 +++---
+ run.php      | 3 ++-
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/locallib.php b/locallib.php
+index e489cd7..89f76fb 100644
+--- a/locallib.php
++++ b/locallib.php
+@@ -64,8 +64,8 @@ class local_codechecker_form extends moodleform {
+  */
+ class local_codechecker_codesniffer_cli extends PHP_CodeSniffer_CLI {
+ 
+-    private $report = 'full';
+-    private $reportfile = null;
++    private $report = 'checkstyle';
++    private $reportfile = 'checkstyle.xml';
+ 
+     /** Constructor */
+     public function __construct() {
+@@ -91,7 +91,7 @@ class local_codechecker_codesniffer_cli extends PHP_CodeSniffer_CLI {
+         $defaults = array_merge(
+             $this->getDefaults(),
+             array(
+-                'reports' => array($this->report => $this->reportfile),
++                'reports' => array($this->report => $this->reportfile)
+             )
+         );
+         return $defaults;
+diff --git a/run.php b/run.php
+index 3b0d034..0d49fab 100644
+--- a/run.php
++++ b/run.php
+@@ -57,7 +57,8 @@ $standard = $CFG->dirroot . str_replace('/', DIRECTORY_SEPARATOR, '/local/codech
+ $phpcs = new PHP_CodeSniffer(1, 0, 'utf-8', $interactive);
+ $phpcs->setCli(new local_codechecker_codesniffer_cli());
+ $phpcs->setIgnorePatterns(local_codesniffer_get_ignores());
++$phpcs->setAllowedFileExtensions(array('php'));
+ $numerrors = $phpcs->process(local_codechecker_clean_path(
+         $CFG->dirroot . '/' . trim($path, '/')),
+         local_codechecker_clean_path($standard));
+-$phpcs->reporting->printReport('full', false, null);
++$phpcs->reporting->printReport('checkstyle', false, 'checkstyle.xml');
+-- 
+1.9.1
+

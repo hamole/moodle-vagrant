@@ -1,0 +1,13 @@
+--- jenkins-	2015-02-05 15:01:14.106430433 +0000
++++ jenkins	2015-02-05 13:27:57.795057656 +0000
+@@ -14,8 +14,8 @@
+ PIDFILE=/var/run/jenkins/jenkins.pid
+ 
+ # user and group to be invoked as (default to jenkins)
+-JENKINS_USER=jenkins
+-JENKINS_GROUP=jenkins
++JENKINS_USER=www-data
++JENKINS_GROUP=vagrant
+ 
+ # location of the jenkins war file
+ JENKINS_WAR=/usr/share/jenkins/jenkins.war
