@@ -9,6 +9,3 @@
 # of the www/ directory.
 vvv.dev
 local.moodle.dev
-local.moodle-trunk.dev
-src.moodle-develop.dev
-build.moodle-develop.dev

@@ -50,7 +50,7 @@ apt_package_check_list=(
 	php5-common
 	php5-dev
 
-	# Extra PHP modules that we find useful
+	# PHP modules required for Moodle, plus what we find useful
 	php5-memcache
 	php5-imagick
 	php5-mcrypt
@@ -59,6 +59,8 @@ apt_package_check_list=(
 	php5-curl
 	php-pear
 	php5-gd
+	php5-xmlrpc
+	php5-intl
 
 	# nginx is installed as the default web server
 	nginx
@@ -398,19 +400,19 @@ fi
 
 if [[ $ping_result == "Connected" ]]; then
 	# WP-CLI Install
-	if [[ ! -d /srv/www/wp-cli ]]; then
-		echo -e "\nDownloading wp-cli, see http://wp-cli.org"
-		git clone https://github.com/wp-cli/wp-cli.git /srv/www/wp-cli
-		cd /srv/www/wp-cli
-		composer install
-	else
-		echo -e "\nUpdating wp-cli..."
-		cd /srv/www/wp-cli
-		git pull --rebase origin master
-		composer update
-	fi
+#	if [[ ! -d /srv/www/wp-cli ]]; then
+#		echo -e "\nDownloading wp-cli, see http://wp-cli.org"
+#		git clone https://github.com/wp-cli/wp-cli.git /srv/www/wp-cli
+#		cd /srv/www/wp-cli
+#		composer install
+#	else
+#		echo -e "\nUpdating wp-cli..."
+#		cd /srv/www/wp-cli
+#		git pull --rebase origin master
+#		composer update
+#	fi
 	# Link `wp` to the `/usr/local/bin` directory
-	ln -sf /srv/www/wp-cli/bin/wp /usr/local/bin/wp
+#	ln -sf /srv/www/wp-cli/bin/wp /usr/local/bin/wp
 
 	# Download and extract phpMemcachedAdmin to provide a dashboard view and
 	# admin interface to the goings on of memcached when running
@@ -465,77 +467,26 @@ if [[ $ping_result == "Connected" ]]; then
 	# Install and configure the latest stable version of WordPress
 
 	# Test to see if an svn upgrade is needed
-	svn_test=$( svn status -u /srv/www/wordpress-develop/ 2>&1 );
-	if [[ $svn_test == *"svn upgrade"* ]]; then
-		# If the wordpress-develop svn repo needed an upgrade, they probably all need it
-		for repo in $(find /srv/www -maxdepth 5 -type d -name '.svn'); do
-			svn upgrade "${repo/%\.svn/}"
-		done
-	fi;
+#	svn_test=$( svn status -u /srv/www/wordpress-develop/ 2>&1 );
+#	if [[ $svn_test == *"svn upgrade"* ]]; then
+#		# If the wordpress-develop svn repo needed an upgrade, they probably all need it
+#		for repo in $(find /srv/www -maxdepth 5 -type d -name '.svn'); do
+#			svn upgrade "${repo/%\.svn/}"
+#		done
+#	fi;
 
-	# Checkout, install and configure WordPress trunk via core.svn
-	if [[ ! -d /srv/www/wordpress-master ]]; then
+	# Checkout, install and configure Moodle master via GitHub
+	if [[ ! -d /srv/www/moodle-master ]]; then
 		echo "Checking out Moodle master from GitHub, see https://github.com/moodle/moodle"
 		git clone https://github.com/moodle/moodle.git /srv/www/moodle-master
 		cd /srv/www/moodle-master
-#		echo "Configuring Moodle master..."
-#		wp core config --dbname=wordpress_trunk --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-#// Match any requests made via xip.io.
-#if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(local.wordpress-trunk.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-#	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-#	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-#}
-#
-#define( 'WP_DEBUG', true );
-#PHP
-#		echo "Installing WordPress trunk..."
-#		wp core install --url=local.wordpress-trunk.dev --quiet --title="Local WordPress Trunk Dev" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
+		echo "Configuring Moodle..."
+		sudo -u www-data php admin/cli/install.php --lang=de --non-interactive --allow-unstable --agree-license --wwwroot="http://local.moodle.dev" --dataroot=/srv/moodledata --dbuser=mdl --dbpass=mdl --fullname="Moodle QA Environment" --shortname="MDLQA" --adminpass="Moodle1!" --adminemail="mail@example.com"
 	else
 		echo "Updating Moodle master..."
 		cd /srv/www/moodle-master
 		git pull --no-edit https://github.com/moodle/moodle.git master
 	fi
-
-	# Checkout, install and configure WordPress trunk via develop.svn
-#	if [[ ! -d /srv/www/wordpress-develop ]]; then
-#		echo "Checking out WordPress trunk from develop.svn, see https://develop.svn.wordpress.org/trunk"
-#		svn checkout https://develop.svn.wordpress.org/trunk/ /srv/www/wordpress-develop
-#		cd /srv/www/wordpress-develop/src/
-#		echo "Configuring WordPress develop..."
-#		wp core config --dbname=wordpress_develop --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-#// Match any requests made via xip.io.
-#if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(src|build)(.wordpress-develop.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-#	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-#	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-#} else if ( 'build' === basename( dirname( __FILE__ ) ) ) {
-#	// Allow (src|build).wordpress-develop.dev to share the same Database
-#	define( 'WP_HOME', 'http://build.wordpress-develop.dev' );
-#	define( 'WP_SITEURL', 'http://build.wordpress-develop.dev' );
-#}
-#
-#define( 'WP_DEBUG', true );
-#PHP
-#		echo "Installing WordPress develop..."
-#		wp core install --url=src.wordpress-develop.dev --quiet --title="WordPress Develop" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
-#		cp /srv/config/wordpress-config/wp-tests-config.php /srv/www/wordpress-develop/
-#		cd /srv/www/wordpress-develop/
-#		echo "Running npm install for the first time, this may take several minutes..."
-#		npm install &>/dev/null
-#	else
-#		echo "Updating WordPress develop..."
-#		cd /srv/www/wordpress-develop/
-#		if [[ -e .svn ]]; then
-#			svn up
-#		else
-#			if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
-#				git pull --no-edit git://develop.git.wordpress.org/ master
-#			else
-#				echo "Skip auto git pull on develop.git.wordpress.org since not on master branch"
-#			fi
-#		fi
-		echo "Updating npm packages..."
-		npm install &>/dev/null
-#	fi
 
 #	if [[ ! -d /srv/www/wordpress-develop/build ]]; then
 #		echo "Initializing grunt in WordPress develop... This may take a few moments."
@@ -546,7 +497,7 @@ if [[ $ping_result == "Connected" ]]; then
 	# Sniffs Moodle Coding Standards
 	if [[ ! -d /srv/www/phpcs/CodeSniffer/Standards/Moodle ]]; then
 		echo -e "\nDownloading moodle-local_codechecker, sniffs for PHP_CodeSniffer, see https://github.com/moodlehq/moodle-local_codechecker"
-		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/phpcs/CodeSniffer/Standards/Moodle
+		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/moodle-master/local/codechecker
 		ln -s /srv/
 	else
 		cd /srv/www/phpcs/CodeSniffer/Standards/Moodle
@@ -557,11 +508,8 @@ if [[ $ping_result == "Connected" ]]; then
 			echo -e "\nSkipped updating PHPCS Moodle Coding Standards since not on master branch"
 		fi
 	fi
-	# Install the standards in PHPCS
-	/srv/www/phpcs/scripts/phpcs --config-set installed_paths ./CodeSniffer/Standards/Moodle/
+	/srv/www/phpcs/scripts/phpcs --config-set installed_paths /srv/www/moodle-master/local/codechecker/moodle/
 	/srv/www/phpcs/scripts/phpcs -i
-	# Install into Moodle
-	ln -s /srv/www/phpcs/CodeSniffer/Standards/Moodle /srv/www/moodle-master/local/codechecker
 
 	# Download phpMyAdmin
 	if [[ ! -d /srv/www/default/database-admin ]]; then

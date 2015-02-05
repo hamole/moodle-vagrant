@@ -11,7 +11,7 @@ Vagrant.configure("2") do |config|
 
   # Configuration options for the VirtualBox provider.
   config.vm.provider :virtualbox do |v|
-    v.customize ["modifyvm", :id, "--memory", 1024]
+    v.customize ["modifyvm", :id, "--memory", 2048]
     v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
     v.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
   end
@@ -163,6 +163,12 @@ Vagrant.configure("2") do |config|
   # If a log directory exists in the same directory as your Vagrantfile, a mapped
   # directory inside the VM will be created for some generated log files.
   config.vm.synced_folder "log/", "/srv/log", :owner => "www-data"
+
+  # /srv/moodledata/
+  #
+  # If a moodledata directory exists in the same directory as your Vagrantfile, a mapped
+  # directory inside the VM will be created to store Moodle's data files.
+  config.vm.synced_folder "moodledata/", "/srv/moodledata", :owner => "www-data"
 
   # /srv/www/
   #
