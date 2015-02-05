@@ -14,13 +14,15 @@ if ( file_exists( 'dashboard-custom.php' ) ) {
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Varying Vagrant Vagrants Dashboard</title>
+	<title>Moodle QA Dashboard</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
+
+<h1>Moodle QA Environment</h1>
+
 <ul class="nav">
 	<li class="active"><a href="#">Home</a></li>
-	<li><a href="https://github.com/varying-vagrant-vagrants/vvv/">Repository</a></li>
 	<li><a href="database-admin/">phpMyAdmin</a></li>
 	<li><a href="memcached-admin/">phpMemcachedAdmin</a></li>
 	<li><a href="opcache-status/opcache.php">Opcache Status</a></li>
@@ -29,10 +31,10 @@ if ( file_exists( 'dashboard-custom.php' ) ) {
 </ul>
 
 <ul class="nav">
-	<li><a href="http://local.wordpress.dev/">http://local.wordpress.dev</a> for WordPress stable (www/wordpress-default)</li>
-	<li><a href="http://local.wordpress-trunk.dev/">http://local.wordpress-trunk.dev</a> for WordPress trunk (www/wordpress-trunk)</li>
-	<li><a href="http://src.wordpress-develop.dev/">http://src.wordpress-develop.dev</a> for trunk WordPress development files (www/wordpress-develop/src)</li>
-	<li><a href="http://build.wordpress-develop.dev/">http://build.wordpress-develop.dev</a> for a Grunt build of those development files (www/wordpress-develop/build)</li>
+	<li><a href="http://local.moodle.dev/">http://local.moodle.dev</a> for Moodle master (www/moodle-master)</li>
+	<li><a href="http://local.moodle.qa/">http://local.moodle.qa</a> for Jenkins CI server</li>
 </ul>
+
+<p>This work is based on <a href="https://github.com/varying-vagrant-vagrants/vvv/">Varying Vagrant Vagrants</a>.</p>
 </body>
 </html>

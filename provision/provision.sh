@@ -50,7 +50,7 @@ apt_package_check_list=(
 	php5-common
 	php5-dev
 
-	# Extra PHP modules that we find useful
+	# PHP modules required for Moodle, plus what we find useful
 	php5-memcache
 	php5-imagick
 	php5-mcrypt
@@ -59,6 +59,8 @@ apt_package_check_list=(
 	php5-curl
 	php-pear
 	php5-gd
+	php5-xmlrpc
+	php5-intl
 
 	# nginx is installed as the default web server
 	nginx
@@ -99,6 +101,9 @@ apt_package_check_list=(
 	# nodejs for use by grunt
 	g++
 	nodejs
+
+	# QA pipeline
+	jenkins
 )
 
 echo "Check for apt packages to install..."
@@ -159,6 +164,11 @@ if [[ $ping_result == "Connected" ]]; then
 		echo "Applying nodejs signing key..."
 		apt-key adv --quiet --keyserver hkp://keyserver.ubuntu.com:80 --recv-key C7917B12 2>&1 | grep "gpg:"
 		apt-key export C7917B12 | apt-key add -
+
+		# Retrieve the Jenkins CI signing key from jenkins-ci.org
+		echo "Appplying Jenkins CI singing key..."
+		wget -q -O - https://jenkins-ci.org/debian/jenkins-ci.org.key | sudo apt-key add -
+		sudo sh -c 'echo deb http://pkg.jenkins-ci.org/debian binary/ > /etc/apt/sources.list.d/jenkins.list'
 
 		# update all of the package references before installing anything
 		echo "Running apt-get update..."
@@ -397,21 +407,6 @@ if (( $EUID == 0 )); then
 fi
 
 if [[ $ping_result == "Connected" ]]; then
-	# WP-CLI Install
-	if [[ ! -d /srv/www/wp-cli ]]; then
-		echo -e "\nDownloading wp-cli, see http://wp-cli.org"
-		git clone https://github.com/wp-cli/wp-cli.git /srv/www/wp-cli
-		cd /srv/www/wp-cli
-		composer install
-	else
-		echo -e "\nUpdating wp-cli..."
-		cd /srv/www/wp-cli
-		git pull --rebase origin master
-		composer update
-	fi
-	# Link `wp` to the `/usr/local/bin` directory
-	ln -sf /srv/www/wp-cli/bin/wp /usr/local/bin/wp
-
 	# Download and extract phpMemcachedAdmin to provide a dashboard view and
 	# admin interface to the goings on of memcached when running
 	if [[ ! -d /srv/www/default/memcached-admin ]]; then
@@ -448,7 +443,7 @@ if [[ $ping_result == "Connected" ]]; then
 		git pull --rebase origin master
 	fi
 
-	# PHP_CodeSniffer (for running WordPress-Coding-Standards)
+	# PHP_CodeSniffer (for running moodle-local_codechecker)
 	if [[ ! -d /srv/www/phpcs ]]; then
 		echo -e "\nDownloading PHP_CodeSniffer (phpcs), see https://github.com/squizlabs/PHP_CodeSniffer"
 		git clone -b master https://github.com/squizlabs/PHP_CodeSniffer.git /srv/www/phpcs
@@ -462,128 +457,38 @@ if [[ $ping_result == "Connected" ]]; then
 		fi
 	fi
 
-	# Sniffs WordPress Coding Standards
-	if [[ ! -d /srv/www/phpcs/CodeSniffer/Standards/WordPress ]]; then
-		echo -e "\nDownloading WordPress-Coding-Standards, sniffs for PHP_CodeSniffer, see https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards"
-		git clone -b master https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards.git /srv/www/phpcs/CodeSniffer/Standards/WordPress
+	# Checkout, install and configure Moodle master via GitHub
+	if [[ ! -d /srv/www/moodle-master ]]; then
+		echo "Checking out Moodle master from GitHub, see https://github.com/moodle/moodle"
+		git clone https://github.com/moodle/moodle.git /srv/www/moodle-master
+		cd /srv/www/moodle-master
+		echo "Configuring Moodle..."
+		sudo -u www-data php admin/cli/install.php --lang=de --non-interactive --allow-unstable --agree-license --wwwroot="http://local.moodle.dev" --dataroot=/srv/moodledata --dbuser=mdl --dbpass=mdl --fullname="Moodle QA Environment" --shortname="MDLQA" --adminpass="Moodle1!" --adminemail="mail@example.com"
+		composer install --prefer-source --no-interaction
 	else
-		cd /srv/www/phpcs/CodeSniffer/Standards/WordPress
+		echo "Updating Moodle master..."
+		cd /srv/www/moodle-master
+		git pull --no-edit https://github.com/moodle/moodle.git master
+		composer update
+	fi
+
+	# Sniffs Moodle Coding Standards
+	if [[ ! -d /srv/www/moodle-master/local/codechecker ]]; then
+		echo -e "\nDownloading moodle-local_codechecker, sniffs for PHP_CodeSniffer, see https://github.com/moodlehq/moodle-local_codechecker"
+		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/moodle-master/local/codechecker
+		cd /srv/www/moodle-master/local/codechecker
+		git am < /srv/config/jenkins-config/checkstyle-report.patch
+	else
+		cd /srv/www/moodle-master/local/codechecker
 		if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
-			echo -e "\nUpdating PHP_CodeSniffer WordPress Coding Standards..."
+			echo -e "\nUpdating PHP_CodeSniffer Moodle Coding Standards..."
 			git pull --no-edit origin master
 		else
-			echo -e "\nSkipped updating PHPCS WordPress Coding Standards since not on master branch"
+			echo -e "\nSkipped updating PHPCS Moodle Coding Standards since not on master branch"
 		fi
 	fi
-	# Install the standards in PHPCS
-	/srv/www/phpcs/scripts/phpcs --config-set installed_paths ./CodeSniffer/Standards/WordPress/
+	/srv/www/phpcs/scripts/phpcs --config-set installed_paths /srv/www/moodle-master/local/codechecker
 	/srv/www/phpcs/scripts/phpcs -i
-
-	# Install and configure the latest stable version of WordPress
-	if [[ ! -d /srv/www/wordpress-default ]]; then
-		echo "Downloading WordPress Stable, see http://wordpress.org/"
-		cd /srv/www/
-		curl -L -O https://wordpress.org/latest.tar.gz
-		tar -xvf latest.tar.gz
-		mv wordpress wordpress-default
-		rm latest.tar.gz
-		cd /srv/www/wordpress-default
-		echo "Configuring WordPress Stable..."
-		wp core config --dbname=wordpress_default --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(local.wordpress.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-}
-
-define( 'WP_DEBUG', true );
-PHP
-		echo "Installing WordPress Stable..."
-		wp core install --url=local.wordpress.dev --quiet --title="Local WordPress Dev" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
-	else
-		echo "Updating WordPress Stable..."
-		cd /srv/www/wordpress-default
-		wp core upgrade
-	fi
-
-	# Test to see if an svn upgrade is needed
-	svn_test=$( svn status -u /srv/www/wordpress-develop/ 2>&1 );
-	if [[ $svn_test == *"svn upgrade"* ]]; then
-		# If the wordpress-develop svn repo needed an upgrade, they probably all need it
-		for repo in $(find /srv/www -maxdepth 5 -type d -name '.svn'); do
-			svn upgrade "${repo/%\.svn/}"
-		done
-	fi;
-
-	# Checkout, install and configure WordPress trunk via core.svn
-	if [[ ! -d /srv/www/wordpress-trunk ]]; then
-		echo "Checking out WordPress trunk from core.svn, see https://core.svn.wordpress.org/trunk"
-		svn checkout https://core.svn.wordpress.org/trunk/ /srv/www/wordpress-trunk
-		cd /srv/www/wordpress-trunk
-		echo "Configuring WordPress trunk..."
-		wp core config --dbname=wordpress_trunk --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(local.wordpress-trunk.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-}
-
-define( 'WP_DEBUG', true );
-PHP
-		echo "Installing WordPress trunk..."
-		wp core install --url=local.wordpress-trunk.dev --quiet --title="Local WordPress Trunk Dev" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
-	else
-		echo "Updating WordPress trunk..."
-		cd /srv/www/wordpress-trunk
-		svn up
-	fi
-
-	# Checkout, install and configure WordPress trunk via develop.svn
-	if [[ ! -d /srv/www/wordpress-develop ]]; then
-		echo "Checking out WordPress trunk from develop.svn, see https://develop.svn.wordpress.org/trunk"
-		svn checkout https://develop.svn.wordpress.org/trunk/ /srv/www/wordpress-develop
-		cd /srv/www/wordpress-develop/src/
-		echo "Configuring WordPress develop..."
-		wp core config --dbname=wordpress_develop --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(src|build)(.wordpress-develop.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-	define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-	define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
-} else if ( 'build' === basename( dirname( __FILE__ ) ) ) {
-	// Allow (src|build).wordpress-develop.dev to share the same Database
-	define( 'WP_HOME', 'http://build.wordpress-develop.dev' );
-	define( 'WP_SITEURL', 'http://build.wordpress-develop.dev' );
-}
-
-define( 'WP_DEBUG', true );
-PHP
-		echo "Installing WordPress develop..."
-		wp core install --url=src.wordpress-develop.dev --quiet --title="WordPress Develop" --admin_name=admin --admin_email="admin@local.dev" --admin_password="password"
-		cp /srv/config/wordpress-config/wp-tests-config.php /srv/www/wordpress-develop/
-		cd /srv/www/wordpress-develop/
-		echo "Running npm install for the first time, this may take several minutes..."
-		npm install &>/dev/null
-	else
-		echo "Updating WordPress develop..."
-		cd /srv/www/wordpress-develop/
-		if [[ -e .svn ]]; then
-			svn up
-		else
-			if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
-				git pull --no-edit git://develop.git.wordpress.org/ master
-			else
-				echo "Skip auto git pull on develop.git.wordpress.org since not on master branch"
-			fi
-		fi
-		echo "Updating npm packages..."
-		npm install &>/dev/null
-	fi
-
-	if [[ ! -d /srv/www/wordpress-develop/build ]]; then
-		echo "Initializing grunt in WordPress develop... This may take a few moments."
-		cd /srv/www/wordpress-develop/
-		grunt
-	fi
 
 	# Download phpMyAdmin
 	if [[ ! -d /srv/www/default/database-admin ]]; then
@@ -597,6 +502,37 @@ PHP
 		echo "PHPMyAdmin already installed."
 	fi
 	cp /srv/config/phpmyadmin-config/config.inc.php /srv/www/default/database-admin/
+
+	# Configure Jenkins CI
+	if [[ ! -f /usr/share/jenkins/jenkins-cli.jar ]]; then
+		echo "Downloading Jenkins CI command line interface..."
+		curl -o /usr/share/jenkins/jenkins-cli.jar http://local.moodle.qa//jnlpJars/jenkins-cli.jar
+	fi
+	echo "Configuring Jenkins CI..."
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin git
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin build-pipeline-plugin
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin checkstyle
+	# To make things easier, run Jenkins as www-data:vagrant
+	patch /etc/defaults/jenkins /srv/config/jenkins-config/etc-defaults.diff
+	chown -R www-data:vagrant /var/lib/jenkins
+	chown -R www-data:vagrant /var/cache/jenkins
+	chown -R www-data:vagrant /var/log/jenkins
+	chown -R www-data:vagrant /usr/share/jenkins
+	/etc/init.d/jenkins restart
+	# After the restart, all plugins are available. Create the jobs...
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Unit" < cat /srv/config/jenkins/moodle-unit.xml
+	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Metrics" < cat /srv/config/jenkins/moodle-metrics.xml
+
+	# Configure Moodle QA
+	echo "Configuring Moodle QA..."
+	cat /srv/www/moodle-master/config.php | grep phpunit_ >/dev/null
+	if [[ $? -ne 0 ]]; then
+		echo "\$CFG->phpunit_prefix = 'phpu_';" >> /srv/www/moodle-master/config.php
+		echo "\$CFG->phpunit_dataroot = '/home/vagrant/phpu_moodledata';" >> /srv/www/moodle-master/config.php
+	fi
+	cd /srv/www/moodle-master
+	php admin/tool/phpunit/cli/init.php
+
 else
 	echo -e "\nNo network available, skipping network installations"
 fi
