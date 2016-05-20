@@ -102,8 +102,6 @@ apt_package_check_list=(
 	g++
 	nodejs
 
-	# QA pipeline
-	jenkins
 )
 
 echo "Check for apt packages to install..."
@@ -165,10 +163,6 @@ if [[ $ping_result == "Connected" ]]; then
 		apt-key adv --quiet --keyserver hkp://keyserver.ubuntu.com:80 --recv-key C7917B12 2>&1 | grep "gpg:"
 		apt-key export C7917B12 | apt-key add -
 
-		# Retrieve the Jenkins CI signing key from jenkins-ci.org
-		echo "Appplying Jenkins CI singing key..."
-		wget -q -O - https://jenkins-ci.org/debian/jenkins-ci.org.key | sudo apt-key add -
-		sudo sh -c 'echo deb http://pkg.jenkins-ci.org/debian binary/ > /etc/apt/sources.list.d/jenkins.list'
 
 		# update all of the package references before installing anything
 		echo "Running apt-get update..."
@@ -460,10 +454,10 @@ if [[ $ping_result == "Connected" ]]; then
 	# Checkout, install and configure Moodle master via GitHub
 	if [[ ! -d /srv/www/moodle-master ]]; then
 		echo "Checking out Moodle master from GitHub, see https://github.com/moodle/moodle"
-		git clone https://github.com/moodle/moodle.git /srv/www/moodle-master
+		git clone --depth 1 https://github.com/moodle/moodle.git /srv/www/moodle-master
 		cd /srv/www/moodle-master
 		echo "Configuring Moodle..."
-		sudo -u www-data php admin/cli/install.php --lang=de --non-interactive --allow-unstable --agree-license --wwwroot="http://local.moodle.dev" --dataroot=/srv/moodledata --dbuser=mdl --dbpass=mdl --fullname="Moodle QA Environment" --shortname="MDLQA" --adminpass="Moodle1!" --adminemail="mail@example.com"
+		sudo -u www-data php admin/cli/install.php --lang=en --non-interactive --allow-unstable --agree-license --wwwroot="http://local.moodle.dev" --dataroot=/srv/moodledata --dbuser=mdl --dbpass=mdl --fullname="Moodle QA Environment" --shortname="MDLQA" --adminpass="Moodle1!" --adminemail="mail@example.com"
 		composer install --prefer-source --no-interaction
 	else
 		echo "Updating Moodle master..."
@@ -477,7 +471,6 @@ if [[ $ping_result == "Connected" ]]; then
 		echo -e "\nDownloading moodle-local_codechecker, sniffs for PHP_CodeSniffer, see https://github.com/moodlehq/moodle-local_codechecker"
 		git clone -b master https://github.com/moodlehq/moodle-local_codechecker /srv/www/moodle-master/local/codechecker
 		cd /srv/www/moodle-master/local/codechecker
-		git am < /srv/config/jenkins-config/checkstyle-report.patch
 	else
 		cd /srv/www/moodle-master/local/codechecker
 		if [[ $(git rev-parse --abbrev-ref HEAD) == 'master' ]]; then
@@ -496,45 +489,12 @@ if [[ $ping_result == "Connected" ]]; then
 		cd /srv/www/default
 		wget -q -O phpmyadmin.tar.gz 'https://files.phpmyadmin.net/phpMyAdmin/4.6.1/phpMyAdmin-4.6.1-all-languages.tar.gz'
 		tar -xf phpmyadmin.tar.gz
-		mv phpMyAdmin-4.6.1-all-language database-admin
+		mv phpMyAdmin-4.6.1-all-languages database-admin
 		rm phpmyadmin.tar.gz
 	else
 		echo "PHPMyAdmin already installed."
 	fi
 	cp /srv/config/phpmyadmin-config/config.inc.php /srv/www/default/database-admin/
-
-	# Configure Jenkins CI
-	if [[ ! -f /usr/share/jenkins/jenkins-cli.jar ]]; then
-		echo "Downloading Jenkins CI command line interface..."
-		curl -o /usr/share/jenkins/jenkins-cli.jar http://local.moodle.qa//jnlpJars/jenkins-cli.jar
-	fi
-	echo "Configuring Jenkins CI..."
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin git
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin build-pipeline-plugin
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ install-plugin checkstyle
-	# To make things easier, run Jenkins as www-data:vagrant
-	patch /etc/default/jenkins /srv/config/jenkins-config/etc-default.diff
-	chown -R www-data:vagrant /var/lib/jenkins
-	chown -R www-data:vagrant /var/cache/jenkins
-	chown -R www-data:vagrant /var/log/jenkins
-	chown -R www-data:vagrant /usr/share/jenkins
-	chown -R www-data:vagrant /var/run/jenkins
-	/etc/init.d/jenkins restart
-	# After the restart, all plugins are available. Create the jobs...
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Unit" < /srv/config/jenkins-config/moodle-unit.xml
-	java -jar /usr/share/jenkins/jenkins-cli.jar -s http://local.moodle.qa/ create-job "Moodle.Metrics" < /srv/config/jenkins-config/moodle-metrics.xml
-
-	# Configure Moodle QA
-	echo "Configuring Moodle QA..."
-	cat /srv/www/moodle-master/config.php | grep phpunit_ >/dev/null
-	if [[ $? -ne 0 ]]; then
-		echo "\$CFG->phpunit_prefix = 'phpu_';" >> /srv/www/moodle-master/config.php
-		echo "\$CFG->phpunit_dataroot = '/home/vagrant/phpu_moodledata';" >> /srv/www/moodle-master/config.php
-		mkdir /home/vagrant/phpu_moodledata
-		chown -R www-data:vagrant phpu_moodledata
-	fi
-	cd /srv/www/moodle-master
-	php admin/tool/phpunit/cli/init.php
 
 else
 	echo -e "\nNo network available, skipping network installations"
